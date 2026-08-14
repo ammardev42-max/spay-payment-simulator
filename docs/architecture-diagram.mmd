@@ -1,0 +1,41 @@
+flowchart LR
+    subgraph client ["Clients"]
+        flutter["Flutter App"]
+        swagger["Swagger and Postman"]
+    end
+
+    subgraph gateway ["API Layer"]
+        restApi["Spring MVC REST API"]
+    end
+
+    subgraph service ["SPay Spring Boot Application"]
+        core["Auth, Bank, UPI, Merchant, Payment, Ledger"]
+        outboxPublisher["Outbox Publisher"]
+        paymentWorker["Payment Event Consumer"]
+        retryWorker["Retry and DLQ Worker"]
+        simulator["Payment Simulator"]
+    end
+
+    subgraph datastore ["Data Stores"]
+        postgres["PostgreSQL"]
+        redis["Redis Cache, Limits, and Locks"]
+    end
+
+    subgraph async ["Event Streaming"]
+        kafka["Kafka"]
+    end
+
+    flutter -->|"HTTPS JSON"| restApi
+    swagger -->|"HTTPS JSON"| restApi
+    restApi -->|"Routes"| core
+    core -->|"Transactions and Outbox"| postgres
+    core -->|"Cache and Rate Limits"| redis
+    outboxPublisher -->|"Claims Events"| postgres
+    outboxPublisher -.->|"Publishes PaymentRequested"| kafka
+    kafka -.->|"Delivers Events"| paymentWorker
+    paymentWorker -->|"Reads and Writes Payments"| postgres
+    paymentWorker -->|"Account Locks"| redis
+    paymentWorker -->|"Selects Outcome"| simulator
+    retryWorker -->|"Reads Pending and DLQ"| postgres
+    retryWorker -.->|"Republishes Retry"| kafka
+

@@ -1,0 +1,234 @@
+erDiagram
+    APP_USER ||--o{ BANK_DISCOVERY_SESSION : starts
+    APP_USER ||--o{ BANK_ACCOUNT : owns
+    BANK_DISCOVERY_SESSION ||--o| BANK_ACCOUNT : activates
+    BANK_ACCOUNT ||--o| UPI_CREDENTIAL : secures
+    APP_USER ||--o{ UPI_HANDLE : owns
+    BANK_ACCOUNT ||--o{ UPI_HANDLE : maps_to
+    APP_USER ||--o| MERCHANT : operates
+    BANK_ACCOUNT ||--o{ MERCHANT : settles_for
+    MERCHANT ||--o{ MERCHANT_QR : generates
+    APP_USER ||--o{ PAYMENT_TRANSACTION : initiates
+    BANK_ACCOUNT ||--o{ PAYMENT_TRANSACTION : debited_from
+    BANK_ACCOUNT ||--o{ PAYMENT_TRANSACTION : credited_to
+    MERCHANT o|--o{ PAYMENT_TRANSACTION : receives
+    MERCHANT_QR o|--o| PAYMENT_TRANSACTION : starts
+    PAYMENT_TRANSACTION ||--o{ LEDGER_ENTRY : posts
+    BANK_ACCOUNT ||--o{ LEDGER_ENTRY : records
+    PAYMENT_TRANSACTION ||--|{ PAYMENT_TIMELINE_EVENT : tracks
+    PAYMENT_TRANSACTION ||--o{ PAYMENT_ATTEMPT : retries
+    SIMULATOR_RULE ||--o{ PAYMENT_ATTEMPT : determines
+    APP_USER ||--o{ IDEMPOTENCY_RECORD : owns
+    PAYMENT_TRANSACTION ||--|| IDEMPOTENCY_RECORD : protected_by
+    PAYMENT_TRANSACTION ||--|{ OUTBOX_EVENT : emits
+    OUTBOX_EVENT ||--o{ PROCESSED_EVENT : consumed_as
+    PAYMENT_TRANSACTION ||--o{ DLQ_EVENT : may_dead_letter
+    PAYMENT_ATTEMPT ||--o| DLQ_EVENT : exhausts
+
+    APP_USER {
+        string id
+        string fullName
+        string email
+        string phoneNumber
+        string passwordHash
+        string role
+        string status
+        string createdAt
+        string updatedAt
+    }
+
+    BANK_DISCOVERY_SESSION {
+        string id
+        string userId
+        string bankCode
+        string maskedAccountNumber
+        string ifsc
+        string accountToken
+        string otpHash
+        string status
+        int otpAttempts
+        string expiresAt
+        string otpVerifiedAt
+        string createdAt
+    }
+
+    BANK_ACCOUNT {
+        string id
+        string userId
+        string discoverySessionId
+        string bankCode
+        string bankName
+        string accountToken
+        string maskedAccountNumber
+        string ifsc
+        long balancePaise
+        string status
+        string verifiedAt
+        int version
+        string createdAt
+        string updatedAt
+    }
+
+    UPI_CREDENTIAL {
+        string id
+        string bankAccountId
+        string upiPinHash
+        int failedAttempts
+        string lockedUntil
+        string pinSetAt
+        string updatedAt
+    }
+
+    UPI_HANDLE {
+        string id
+        string userId
+        string bankAccountId
+        string upiId
+        boolean active
+        boolean defaultHandle
+        string createdAt
+        string updatedAt
+    }
+
+    MERCHANT {
+        string id
+        string ownerUserId
+        string settlementBankAccountId
+        string businessName
+        string merchantUpiId
+        string status
+        string createdAt
+        string updatedAt
+    }
+
+    MERCHANT_QR {
+        string id
+        string merchantId
+        string qrReference
+        string payloadHash
+        long amountPaise
+        string note
+        string status
+        string expiresAt
+        string createdAt
+    }
+
+    PAYMENT_TRANSACTION {
+        string id
+        string type
+        string status
+        string senderUserId
+        string senderBankAccountId
+        string receiverUserId
+        string receiverBankAccountId
+        string merchantId
+        string merchantQrId
+        string senderUpi
+        string receiverUpi
+        long amountPaise
+        string currency
+        string note
+        int currentAttempt
+        string failureCode
+        string failureReason
+        string nextRetryAt
+        string createdAt
+        string updatedAt
+        string completedAt
+    }
+
+    LEDGER_ENTRY {
+        string id
+        string bankAccountId
+        string transactionId
+        string direction
+        string entryKind
+        long amountPaise
+        long balanceAfterPaise
+        string deduplicationKey
+        string createdAt
+    }
+
+    PAYMENT_TIMELINE_EVENT {
+        string id
+        string transactionId
+        string status
+        string message
+        string createdAt
+    }
+
+    PAYMENT_ATTEMPT {
+        string id
+        string transactionId
+        string simulatorRuleId
+        int attemptNumber
+        string outcome
+        boolean retryable
+        string failureCode
+        string failureReason
+        string startedAt
+        string completedAt
+        string nextRetryAt
+    }
+
+    IDEMPOTENCY_RECORD {
+        string id
+        string ownerUserId
+        string transactionId
+        string endpoint
+        string idempotencyKey
+        string requestHash
+        int responseStatus
+        string responseJson
+        string status
+        string expiresAt
+        string createdAt
+    }
+
+    OUTBOX_EVENT {
+        string id
+        string transactionId
+        string aggregateType
+        string aggregateId
+        string eventType
+        string payloadJson
+        string status
+        int attempts
+        string nextAttemptAt
+        string lastError
+        string createdAt
+        string publishedAt
+    }
+
+    PROCESSED_EVENT {
+        string id
+        string outboxEventId
+        string eventId
+        string consumerName
+        string processedAt
+    }
+
+    DLQ_EVENT {
+        string id
+        string transactionId
+        string lastAttemptId
+        string sourceEventId
+        string status
+        string reasonCode
+        string reason
+        int retryCount
+        string createdAt
+        string lastRetriedAt
+    }
+
+    SIMULATOR_RULE {
+        string id
+        string mode
+        int successRate
+        int pendingRate
+        boolean timeoutEnabled
+        int maxAttempts
+        boolean active
+        string updatedBy
+        string updatedAt
+    }

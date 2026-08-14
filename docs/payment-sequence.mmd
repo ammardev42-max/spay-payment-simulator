@@ -1,0 +1,26 @@
+sequenceDiagram
+    title SPay asynchronous UPI payment happy path
+    participant Flutter
+    participant API
+    participant PostgreSQL
+    participant OutboxPublisher
+    participant Kafka
+    participant PaymentConsumer
+    participant Redis
+    participant Simulator
+
+    Flutter->>API: POST /api/payments/upi
+    API->>Redis: Check payment rate limit
+    API->>PostgreSQL: Validate idempotency and save payment plus outbox
+    PostgreSQL-->>API: Transaction committed
+    API-->>Flutter: 202 with transaction ID
+    OutboxPublisher->>PostgreSQL: Claim pending outbox event
+    OutboxPublisher->>Kafka: Publish PaymentRequested
+    Kafka-->>PaymentConsumer: Deliver event
+    PaymentConsumer->>Redis: Acquire account locks
+    PaymentConsumer->>PostgreSQL: Lock rows and validate balance
+    PaymentConsumer->>Simulator: Resolve processing outcome
+    Simulator-->>PaymentConsumer: Success
+    PaymentConsumer->>PostgreSQL: Post ledger and mark success
+    Flutter->>API: GET /api/payments/id
+    API-->>Flutter: SUCCESS receipt
