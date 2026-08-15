@@ -31,3 +31,8 @@ springdoc:
 
 server:
   port: ${SERVER_PORT:8080}
+
+spay:
+  jwt:
+    secret-key: ${JWT_SECRET_KEY:spay-local-dev-secret-key-change-before-production-123456}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:1440}

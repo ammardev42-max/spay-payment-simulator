@@ -4,6 +4,7 @@ import com.ammarbhatkar.SPay.auth.dto.request.LoginRequest;
 import com.ammarbhatkar.SPay.auth.dto.request.RegisterRequest;
 import com.ammarbhatkar.SPay.auth.dto.response.AuthResponse;
 import com.ammarbhatkar.SPay.auth.service.AuthService;
+import com.ammarbhatkar.SPay.auth.service.JwtService;
 import com.ammarbhatkar.SPay.common.enums.UserRole;
 import com.ammarbhatkar.SPay.common.enums.UserStatus;
 import com.ammarbhatkar.SPay.common.exception.BusinessRuleViolationException;
@@ -13,6 +14,8 @@ import com.ammarbhatkar.SPay.user.mapper.UserMapper;
 import com.ammarbhatkar.SPay.user.repository.AppUserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +28,8 @@ public class AuthServiceImpl implements AuthService {
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserMapper userMapper;
-
+    private final AuthenticationManager authenticationManager;
+    private final JwtService jwtService;
     @Override
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -62,11 +66,28 @@ public class AuthServiceImpl implements AuthService {
         return userMapper.toAuthResponse(savedUser);
     }
 
+
     @Override
     public AuthResponse login(LoginRequest request) {
-        throw new BusinessRuleViolationException(
-                "LOGIN_NOT_IMPLEMENTED",
-                "Login will be implemented after register"
+        String normalizedEmail= request.email().trim().toLowerCase();
+        authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(
+                        normalizedEmail,
+                        request.password()
+                )
         );
+        AppUser appUser = appUserRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new BusinessRuleViolationException(
+                        "INVALID_LOGIN_CREDENTIALS",
+                        "Invalid email or password"
+                ));
+
+        String accessToken = jwtService.generateAccessToken(
+                appUser.getEmail(),
+                appUser.getId(),
+                appUser.getRole()
+        );
+
+        return userMapper.toAuthResponse(appUser, accessToken);
     }
 }
