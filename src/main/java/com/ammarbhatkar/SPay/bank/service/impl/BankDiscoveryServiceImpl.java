@@ -11,6 +11,7 @@ import com.ammarbhatkar.SPay.bank.service.BankDiscoveryService;
 import com.ammarbhatkar.SPay.common.enums.BankDiscoveryStatus;
 import com.ammarbhatkar.SPay.common.exception.BusinessRuleViolationException;
 import com.ammarbhatkar.SPay.common.exception.ResourceNotFoundException;
+import com.ammarbhatkar.SPay.common.security.UserContext;
 import com.ammarbhatkar.SPay.user.entity.AppUser;
 import com.ammarbhatkar.SPay.user.repository.AppUserRepository;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class BankDiscoveryServiceImpl implements BankDiscoveryService {
     private final AppUserRepository appUserRepository;
     private final BankDiscoverySessionRepository bankDiscoverySessionRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserContext userContext;
 
     private static final Map<String, String> SUPPORTED_BANKS = Map.of(
             "HDFC", "HDFC Bank",
@@ -58,8 +60,11 @@ public class BankDiscoveryServiceImpl implements BankDiscoveryService {
     @Override
     @Transactional
     public BankDiscoveryResponse startDiscovery(StartBankDiscoveryRequest request) {
-        AppUser user = getCurrentUser();
-        String bankCode = request.bankCode().trim().toUpperCase(Locale.ROOT);
+        AppUser user = appUserRepository.findById(userContext.getUserId())
+                   .orElseThrow(() -> new ResourceNotFoundException(
+                                     "User",
+                                     userContext.getUserId().toString()
+                           ));        String bankCode = request.bankCode().trim().toUpperCase(Locale.ROOT);
 
         if (!SUPPORTED_BANKS.containsKey(bankCode)) {
             throw new BusinessRuleViolationException(
@@ -149,10 +154,4 @@ public class BankDiscoveryServiceImpl implements BankDiscoveryService {
         );
     }
 
-    private AppUser getCurrentUser() {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-
-        return appUserRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("User", email));
-    }
 }
