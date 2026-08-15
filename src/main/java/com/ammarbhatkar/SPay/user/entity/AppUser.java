@@ -1,6 +1,8 @@
 package com.ammarbhatkar.SPay.user.entity;
 
 
+import com.ammarbhatkar.SPay.common.enums.UserRole;
+import com.ammarbhatkar.SPay.common.enums.UserStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -32,11 +34,13 @@ public class AppUser {
     @Column(nullable = false)
     private String passwordHash;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false,length = 30)
-    private String role;
+    private UserRole role;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private String status;
+    private UserStatus status;
 
 
     @Column(nullable = false, updatable = false)
@@ -44,4 +48,16 @@ public class AppUser {
 
     @Column(nullable = false)
     private Instant updatedAt;
+
+    @PrePersist
+    void onCreate() {
+        Instant now = Instant.now();
+        createdAt = now;
+        updatedAt = now;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        updatedAt = Instant.now();
+    }
 }
