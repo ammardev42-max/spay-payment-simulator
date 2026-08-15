@@ -1,8 +1,10 @@
 package com.ammarbhatkar.SPay.bank.controller;
 
 import com.ammarbhatkar.SPay.bank.dto.request.StartBankDiscoveryRequest;
+import com.ammarbhatkar.SPay.bank.dto.request.VerifyOtpRequest;
 import com.ammarbhatkar.SPay.bank.dto.response.BankDiscoveryResponse;
 import com.ammarbhatkar.SPay.bank.dto.response.SupportedBankResponse;
+import com.ammarbhatkar.SPay.bank.dto.response.VerifyOtpResponse;
 import com.ammarbhatkar.SPay.bank.service.BankDiscoveryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/banks")
@@ -29,5 +32,11 @@ public class BankDiscoveryController {
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 bankDiscoveryService.startDiscovery(request)
         );
+    }
+    @PostMapping("/discovery/{sessionId}/verify-otp")
+    public ResponseEntity<VerifyOtpResponse> verifyOtp(
+            @PathVariable UUID sessionId,
+            @RequestBody @Valid VerifyOtpRequest request){
+        return ResponseEntity.ok(bankDiscoveryService.verifyOtp(sessionId,request));
     }
 }

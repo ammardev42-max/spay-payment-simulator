@@ -1,8 +1,10 @@
 package com.ammarbhatkar.SPay.bank.service.impl;
 
 import com.ammarbhatkar.SPay.bank.dto.request.StartBankDiscoveryRequest;
+import com.ammarbhatkar.SPay.bank.dto.request.VerifyOtpRequest;
 import com.ammarbhatkar.SPay.bank.dto.response.BankDiscoveryResponse;
 import com.ammarbhatkar.SPay.bank.dto.response.SupportedBankResponse;
+import com.ammarbhatkar.SPay.bank.dto.response.VerifyOtpResponse;
 import com.ammarbhatkar.SPay.bank.entity.BankDiscoverySession;
 import com.ammarbhatkar.SPay.bank.repository.BankDiscoverySessionRepository;
 import com.ammarbhatkar.SPay.bank.service.BankDiscoveryService;
@@ -12,7 +14,7 @@ import com.ammarbhatkar.SPay.common.exception.ResourceNotFoundException;
 import com.ammarbhatkar.SPay.user.entity.AppUser;
 import com.ammarbhatkar.SPay.user.repository.AppUserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.connection.RedisSubscribedConnectionException;
+//import org.springframework.data.redis.connection.RedisSubscribedConnectionException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -91,6 +93,59 @@ public class BankDiscoveryServiceImpl implements BankDiscoveryService {
                 savedSession.getStatus().name(),
                 savedSession.getExpiresAt(),
                 otp
+        );
+    }
+
+    @Override
+    @Transactional
+    public VerifyOtpResponse verifyOtp(UUID sessionId, VerifyOtpRequest otpRequest) {
+        BankDiscoverySession session = bankDiscoverySessionRepository.findById(sessionId)
+                   .orElseThrow(() -> new ResourceNotFoundException("BankDiscoverySession", sessionId.toString()));
+
+            if(session.getStatus()!=BankDiscoveryStatus.OTP_SENT){
+                throw new BusinessRuleViolationException(
+                        "INVALID_DISCOVERY_SESSION_STATE",
+                        "OTP cannot be verified for current session state: " + session.getStatus()
+                );
+            }
+        if (session.getExpiresAt().isBefore(Instant.now())) {
+                     session.setStatus(BankDiscoveryStatus.EXPIRED);
+                     bankDiscoverySessionRepository.save(session);
+                     throw new BusinessRuleViolationException(
+                                     "OTP_EXPIRED",
+                                     "OTP has expired. Please start bank discovery again."
+                             );
+                 }
+
+             if (session.getOtpAttempts() >= 3) {
+                     session.setStatus(BankDiscoveryStatus.EXPIRED);
+                     bankDiscoverySessionRepository.save(session);
+
+                     throw new BusinessRuleViolationException(
+                                     "OTP_ATTEMPTS_EXCEEDED",
+                                     "Too many wrong OTP attempts. Please start bank discovery again."
+                             );
+                 }
+             boolean otpMatches = passwordEncoder.matches(
+                     otpRequest.otp(),
+                     session.getOtpHash()
+             );
+        if (!otpMatches) {
+                     session.setOtpAttempts(session.getOtpAttempts() + 1);
+                     bankDiscoverySessionRepository.save(session);
+
+                     throw new BusinessRuleViolationException(
+                                     "INVALID_OTP",
+                                     "Invalid OTP"
+                     );
+                 }
+        session.setStatus(BankDiscoveryStatus.OTP_VERIFIED);
+        session.setOtpVerifiedAt(Instant.now());
+        bankDiscoverySessionRepository.save(session);
+        return new VerifyOtpResponse(
+                session.getId(),
+                session.getStatus().name(),
+                "OTP verified successfully"
         );
     }
 
