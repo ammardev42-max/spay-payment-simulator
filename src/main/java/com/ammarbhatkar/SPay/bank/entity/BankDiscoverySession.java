@@ -28,6 +28,9 @@ public class BankDiscoverySession {
     @Column(nullable = false, length = 30)
     private String bankCode;
 
+    @Column(nullable = false, length = 80)
+    private String bankName;
+
     @Column(nullable = false, length = 20)
     private String maskedAccountNumber;
 

@@ -79,6 +79,7 @@ public class BankDiscoveryServiceImpl implements BankDiscoveryService {
         BankDiscoverySession session = BankDiscoverySession.builder()
                 .user(user)
                 .bankCode(bankCode)
+                .bankName(SUPPORTED_BANKS.get(bankCode))
                 .maskedAccountNumber("XXXXXX" + lastFour)
                 .ifsc(bankCode + "0001234")
                 .accountToken(UUID.randomUUID().toString())

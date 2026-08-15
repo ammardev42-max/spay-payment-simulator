@@ -13,5 +13,5 @@ public interface BankAccountRepository extends JpaRepository<BankAccount, UUID> 
 
     Optional<BankAccount> findByDiscoverySession(BankDiscoverySession discoverySession);
 
-    List<BankAccount> findByUser(AppUser user);
+    List<BankAccount> findByUser_Id(UUID userId);
 }
