@@ -28,6 +28,14 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(exception.getErrorCode(), exception.getMessage()));
     }
 
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFoundException(ResourceNotFoundException e){
+
+        String errorCode= e.getResourceName().toUpperCase() + "_NOT_FOUND";
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of(errorCode,e.getMessage()));
+     }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException exception) {
         List<ErrorResponse.FieldError> fieldErrors = exception.getBindingResult()

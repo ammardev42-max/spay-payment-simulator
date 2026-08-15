@@ -1,5 +1,7 @@
 package com.ammarbhatkar.SPay.bank.dto.response;
 
-public class SupportedBankResponse {
+public record SupportedBankResponse(
+        String bankCode,
+        String bankName
+) {
 }
-
