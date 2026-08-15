@@ -1,7 +1,9 @@
 package com.ammarbhatkar.SPay.bank.controller;
 
+import com.ammarbhatkar.SPay.bank.dto.request.SetUpiPinRequest;
 import com.ammarbhatkar.SPay.bank.dto.request.VerifyDebitCardRequest;
 import com.ammarbhatkar.SPay.bank.dto.response.BankAccountResponse;
+import com.ammarbhatkar.SPay.bank.dto.response.UpiCredentialResponse;
 import com.ammarbhatkar.SPay.bank.service.BankAccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,5 +31,13 @@ public class BankAccountController {
     @GetMapping("/me")
     public ResponseEntity<List<BankAccountResponse>> getMyBankAccounts() {
         return ResponseEntity.ok(bankAccountService.getMyBankAccounts());
+    }
+
+    @PostMapping("/{bankAccountId}/upi-pin")
+    public ResponseEntity<UpiCredentialResponse> setUpiPin(
+            @PathVariable UUID bankAccountId,
+            @RequestBody @Valid SetUpiPinRequest request
+    ) {
+        return ResponseEntity.ok(bankAccountService.setUpiPin(bankAccountId, request));
     }
 }
