@@ -19,6 +19,7 @@ import com.ammarbhatkar.SPay.payment.mapper.PaymentMapper;
 import com.ammarbhatkar.SPay.payment.mapper.PaymentTimelineMapper;
 import com.ammarbhatkar.SPay.payment.repository.PaymentTimelineEventRepository;
 import com.ammarbhatkar.SPay.payment.repository.PaymentTransactionRepository;
+import com.ammarbhatkar.SPay.payment.service.IdempotencyService;
 import com.ammarbhatkar.SPay.payment.service.PaymentService;
 import com.ammarbhatkar.SPay.upi.entity.UpiHandle;
 import com.ammarbhatkar.SPay.upi.repository.UpiHandleRepository;
@@ -47,12 +48,47 @@ public class PaymentServiceImpl implements PaymentService {
     private final PasswordEncoder passwordEncoder;
     private final BankAccountRepository bankAccountRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
+    private final IdempotencyService idempotencyService;
+    private static final String UPI_PAYMENT_ENDPOINT = "/api/payments/upi";
 
 
 
     @Override
     @Transactional
-    public PaymentResponse createUpiPayment(CreateUpiPaymentRequest request) {
+    public PaymentResponse createUpiPayment(CreateUpiPaymentRequest request, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BusinessRuleViolationException(
+                    "IDEMPOTENCY_KEY_REQUIRED",
+                    "X-Idempotency-Key header is required for payment requests"
+            );
+        }
+
+        String requestHash = idempotencyService.hashUpiPaymentRequest(request);
+        PaymentResponse existingResponse = idempotencyService.getExistingPaymentResponse(
+                UPI_PAYMENT_ENDPOINT,
+                idempotencyKey.trim(),
+                requestHash
+        );
+
+        if (existingResponse != null) {
+            return existingResponse;
+        }
+
+        PaymentTransaction completedTransaction = processUpiPayment(request);
+        PaymentResponse response = paymentMapper.toResponse(completedTransaction);
+
+        idempotencyService.savePaymentResponse(
+                UPI_PAYMENT_ENDPOINT,
+                idempotencyKey.trim(),
+                requestHash,
+                completedTransaction,
+                response
+        );
+
+        return response;
+    }
+
+    private PaymentTransaction processUpiPayment(CreateUpiPaymentRequest request) {
         String senderUpi = request.senderUpi().trim().toLowerCase(Locale.ROOT);
         String receiverUpi = request.receiverUpi().trim().toLowerCase(Locale.ROOT);
 
@@ -111,7 +147,7 @@ public class PaymentServiceImpl implements PaymentService {
         PaymentTransaction completedTransaction = paymentTransactionRepository.save(savedTransaction);
         addTimeline(completedTransaction, PaymentStatus.SUCCESS, "Payment completed successfully");
 
-        return paymentMapper.toResponse(completedTransaction);
+        return completedTransaction;
     }
 
     @Override

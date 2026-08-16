@@ -22,9 +22,10 @@ public class PaymentController {
 
     @PostMapping("/upi")
     public ResponseEntity<PaymentResponse>createUpiPayment
-            (@RequestBody @Valid CreateUpiPaymentRequest request){
+            (@RequestBody @Valid CreateUpiPaymentRequest request,
+             @RequestHeader("X-Idempotency-Key") String idempotencyKey){
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(paymentService.createUpiPayment(request));
+                .body(paymentService.createUpiPayment(request, idempotencyKey));
     }
 
     @GetMapping("/{paymentId}")

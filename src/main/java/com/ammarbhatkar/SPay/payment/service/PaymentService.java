@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public interface PaymentService {
 
-    PaymentResponse createUpiPayment(CreateUpiPaymentRequest request);
+    PaymentResponse createUpiPayment(CreateUpiPaymentRequest request, String idempotencyKey);
 
     PaymentResponse getPayment(UUID paymentId);
 
