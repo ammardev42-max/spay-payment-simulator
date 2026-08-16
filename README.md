@@ -244,6 +244,14 @@ Money is moved only after simulator success. Retryable and non-retryable simulat
 
 ## Architecture
 
+Design diagram exports:
+
+![ER Diagram](docs/diagram_images/er-diagram.png)
+
+![Architecture and Payment Flow](docs/diagram_images/architecture-payment-flow.png)
+
+![Idempotency Retry DLQ Flow](docs/diagram_images/idempotency-retry-dlq-flow.png)
+
 ```mermaid
 flowchart LR
     client["Swagger / Flutter Client"]
