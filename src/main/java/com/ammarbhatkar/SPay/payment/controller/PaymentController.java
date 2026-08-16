@@ -2,6 +2,7 @@ package com.ammarbhatkar.SPay.payment.controller;
 
 
 import com.ammarbhatkar.SPay.payment.dto.request.CreateUpiPaymentRequest;
+import com.ammarbhatkar.SPay.payment.dto.response.PaymentAttemptResponse;
 import com.ammarbhatkar.SPay.payment.dto.response.PaymentResponse;
 import com.ammarbhatkar.SPay.payment.dto.response.PaymentTimelineResponse;
 import com.ammarbhatkar.SPay.payment.service.PaymentService;
@@ -38,6 +39,13 @@ public class PaymentController {
             @PathVariable UUID paymentId
     ) {
         return ResponseEntity.ok(paymentService.getTimeline(paymentId));
+    }
+
+    @GetMapping("/{paymentId}/attempts")
+    public ResponseEntity<List<PaymentAttemptResponse>> getAttempts(
+            @PathVariable UUID paymentId
+    ) {
+        return ResponseEntity.ok(paymentService.getAttempts(paymentId));
     }
 
     @GetMapping("/history")

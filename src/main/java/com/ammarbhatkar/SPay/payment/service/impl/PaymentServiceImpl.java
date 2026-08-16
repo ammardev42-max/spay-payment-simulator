@@ -11,16 +11,23 @@ import com.ammarbhatkar.SPay.common.security.UserContext;
 import com.ammarbhatkar.SPay.ledger.entity.LedgerEntry;
 import com.ammarbhatkar.SPay.ledger.repository.LedgerEntryRepository;
 import com.ammarbhatkar.SPay.payment.dto.request.CreateUpiPaymentRequest;
+import com.ammarbhatkar.SPay.payment.dto.response.PaymentAttemptResponse;
 import com.ammarbhatkar.SPay.payment.dto.response.PaymentResponse;
 import com.ammarbhatkar.SPay.payment.dto.response.PaymentTimelineResponse;
+import com.ammarbhatkar.SPay.payment.entity.DlqEvent;
+import com.ammarbhatkar.SPay.payment.entity.PaymentAttempt;
 import com.ammarbhatkar.SPay.payment.entity.PaymentTimelineEvent;
 import com.ammarbhatkar.SPay.payment.entity.PaymentTransaction;
 import com.ammarbhatkar.SPay.payment.mapper.PaymentMapper;
 import com.ammarbhatkar.SPay.payment.mapper.PaymentTimelineMapper;
+import com.ammarbhatkar.SPay.payment.repository.DlqEventRepository;
+import com.ammarbhatkar.SPay.payment.repository.PaymentAttemptRepository;
 import com.ammarbhatkar.SPay.payment.repository.PaymentTimelineEventRepository;
 import com.ammarbhatkar.SPay.payment.repository.PaymentTransactionRepository;
 import com.ammarbhatkar.SPay.payment.service.IdempotencyService;
 import com.ammarbhatkar.SPay.payment.service.PaymentService;
+import com.ammarbhatkar.SPay.simulator.entity.SimulatorRule;
+import com.ammarbhatkar.SPay.simulator.service.SimulatorService;
 import com.ammarbhatkar.SPay.upi.entity.UpiHandle;
 import com.ammarbhatkar.SPay.upi.repository.UpiHandleRepository;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +56,9 @@ public class PaymentServiceImpl implements PaymentService {
     private final BankAccountRepository bankAccountRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
     private final IdempotencyService idempotencyService;
+    private final SimulatorService simulatorService;
+    private final PaymentAttemptRepository paymentAttemptRepository;
+    private final DlqEventRepository dlqEventRepository;
     private static final String UPI_PAYMENT_ENDPOINT = "/api/payments/upi";
 
 
@@ -134,7 +144,31 @@ public class PaymentServiceImpl implements PaymentService {
         validatePayment(request, senderAccount, receiverAccount);
 
         savedTransaction.setStatus(PaymentStatus.PROCESSING);
-        addTimeline(savedTransaction, PaymentStatus.PROCESSING, "Moving money between bank accounts");
+        addTimeline(savedTransaction, PaymentStatus.PROCESSING, "Processing payment through SPay simulator");
+
+        SimulatorRule simulatorRule = simulatorService.getActiveRule();
+        PaymentAttemptOutcome outcome = simulatorService.decideOutcome(simulatorRule);
+
+        if (outcome == PaymentAttemptOutcome.NON_RETRYABLE_FAILURE) {
+            return failWithoutRetry(savedTransaction, simulatorRule);
+        }
+
+        if (outcome == PaymentAttemptOutcome.RETRYABLE_FAILURE) {
+            return retryAndDeadLetter(savedTransaction, simulatorRule);
+        }
+
+        createPaymentAttempt(
+                savedTransaction,
+                simulatorRule,
+                1,
+                PaymentAttemptOutcome.SUCCESS,
+                false,
+                null,
+                null,
+                null
+        );
+        addTimeline(savedTransaction, PaymentStatus.PROCESSING, "Simulator approved payment, moving money between bank accounts");
+
         senderAccount.setBalancePaise(senderAccount.getBalancePaise() - request.amountPaise());
         receiverAccount.setBalancePaise(receiverAccount.getBalancePaise() + request.amountPaise());
 
@@ -176,6 +210,16 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
+    public List<PaymentAttemptResponse> getAttempts(UUID paymentId) {
+        getPayment(paymentId);
+
+        return paymentAttemptRepository.findByTransaction_IdOrderByAttemptNumberAsc(paymentId)
+                .stream()
+                .map(this::toAttemptResponse)
+                .toList();
+    }
+
+    @Override
     public List<PaymentResponse> getHistory() {
         return paymentMapper.toResponseList(
                 paymentTransactionRepository
@@ -193,6 +237,126 @@ public class PaymentServiceImpl implements PaymentService {
                 .build();
 
         paymentTimelineEventRepository.save(event);
+    }
+
+    private PaymentTransaction failWithoutRetry(
+            PaymentTransaction transaction,
+            SimulatorRule simulatorRule
+    ) {
+        PaymentAttempt attempt = createPaymentAttempt(
+                transaction,
+                simulatorRule,
+                1,
+                PaymentAttemptOutcome.NON_RETRYABLE_FAILURE,
+                false,
+                "SIM_PROVIDER_DECLINED",
+                "Simulator rejected the payment without retry",
+                null
+        );
+
+        transaction.setCurrentAttempt(attempt.getAttemptNumber());
+        transaction.setStatus(PaymentStatus.FAILED);
+        transaction.setFailureCode(attempt.getFailureCode());
+        transaction.setFailureReason(attempt.getFailureReason());
+        transaction.setCompletedAt(Instant.now());
+
+        PaymentTransaction failedTransaction = paymentTransactionRepository.save(transaction);
+        addTimeline(failedTransaction, PaymentStatus.FAILED, "Payment failed by simulator without retry");
+        return failedTransaction;
+    }
+
+    private PaymentTransaction retryAndDeadLetter(
+            PaymentTransaction transaction,
+            SimulatorRule simulatorRule
+    ) {
+        PaymentAttempt lastAttempt = null;
+        int maxAttempts = simulatorRule.getMaxAttempts();
+
+        for (int attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber++) {
+            Instant nextRetryAt = attemptNumber < maxAttempts
+                    ? Instant.now().plusSeconds(attemptNumber * 10L)
+                    : null;
+
+            lastAttempt = createPaymentAttempt(
+                    transaction,
+                    simulatorRule,
+                    attemptNumber,
+                    PaymentAttemptOutcome.RETRYABLE_FAILURE,
+                    true,
+                    "SIM_PROVIDER_TIMEOUT",
+                    "Simulator provider timeout, retry attempt failed",
+                    nextRetryAt
+            );
+
+            transaction.setCurrentAttempt(attemptNumber);
+            transaction.setNextRetryAt(nextRetryAt);
+            addTimeline(
+                    transaction,
+                    PaymentStatus.PROCESSING,
+                    "Retry attempt " + attemptNumber + " failed due to simulator timeout"
+            );
+        }
+
+        transaction.setStatus(PaymentStatus.DEAD_LETTERED);
+        transaction.setFailureCode("SIM_RETRIES_EXHAUSTED");
+        transaction.setFailureReason("Simulator retry attempts exhausted");
+        transaction.setNextRetryAt(null);
+        transaction.setCompletedAt(Instant.now());
+
+        PaymentTransaction deadLetteredTransaction = paymentTransactionRepository.save(transaction);
+        DlqEvent dlqEvent = DlqEvent.builder()
+                .transaction(deadLetteredTransaction)
+                .lastAttempt(lastAttempt)
+                .status(DlqStatus.OPEN)
+                .reasonCode("PAYMENT_RETRIES_EXHAUSTED")
+                .reason("Payment moved to DLQ after simulator retry attempts were exhausted")
+                .retryCount(maxAttempts)
+                .build();
+
+        dlqEventRepository.save(dlqEvent);
+        addTimeline(deadLetteredTransaction, PaymentStatus.DEAD_LETTERED, "Payment moved to DLQ after retries exhausted");
+        return deadLetteredTransaction;
+    }
+
+    private PaymentAttempt createPaymentAttempt(
+            PaymentTransaction transaction,
+            SimulatorRule simulatorRule,
+            Integer attemptNumber,
+            PaymentAttemptOutcome outcome,
+            Boolean retryable,
+            String failureCode,
+            String failureReason,
+            Instant nextRetryAt
+    ) {
+        PaymentAttempt attempt = PaymentAttempt.builder()
+                .transaction(transaction)
+                .simulatorRule(simulatorRule)
+                .attemptNumber(attemptNumber)
+                .outcome(outcome)
+                .retryable(retryable)
+                .failureCode(failureCode)
+                .failureReason(failureReason)
+                .startedAt(Instant.now())
+                .completedAt(Instant.now())
+                .nextRetryAt(nextRetryAt)
+                .build();
+
+        return paymentAttemptRepository.save(attempt);
+    }
+
+    private PaymentAttemptResponse toAttemptResponse(PaymentAttempt attempt) {
+        return new PaymentAttemptResponse(
+                attempt.getId(),
+                attempt.getTransaction().getId(),
+                attempt.getAttemptNumber(),
+                attempt.getOutcome().name(),
+                attempt.getRetryable(),
+                attempt.getFailureCode(),
+                attempt.getFailureReason(),
+                attempt.getStartedAt(),
+                attempt.getCompletedAt(),
+                attempt.getNextRetryAt()
+        );
     }
 
     private void validatePayment(

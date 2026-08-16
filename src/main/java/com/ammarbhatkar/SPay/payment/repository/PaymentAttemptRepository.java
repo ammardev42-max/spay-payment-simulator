@@ -1,5 +1,12 @@
 package com.ammarbhatkar.SPay.payment.repository;
 
-public interface PaymentAttemptRepository {
-}
+import com.ammarbhatkar.SPay.payment.entity.PaymentAttempt;
+import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
+import java.util.UUID;
+
+public interface PaymentAttemptRepository extends JpaRepository<PaymentAttempt, UUID> {
+
+    List<PaymentAttempt> findByTransaction_IdOrderByAttemptNumberAsc(UUID transactionId);
+}
