@@ -7,9 +7,12 @@ import com.ammarbhatkar.SPay.bank.repository.UpiCredentialRepository;
 import com.ammarbhatkar.SPay.common.enums.*;
 import com.ammarbhatkar.SPay.common.exception.BusinessRuleViolationException;
 import com.ammarbhatkar.SPay.common.exception.ResourceNotFoundException;
+import com.ammarbhatkar.SPay.common.lock.DistributedLockService;
+import com.ammarbhatkar.SPay.common.ratelimit.RateLimitService;
 import com.ammarbhatkar.SPay.common.security.UserContext;
 import com.ammarbhatkar.SPay.ledger.entity.LedgerEntry;
 import com.ammarbhatkar.SPay.ledger.repository.LedgerEntryRepository;
+import com.ammarbhatkar.SPay.outbox.service.OutboxService;
 import com.ammarbhatkar.SPay.payment.dto.request.CreateUpiPaymentRequest;
 import com.ammarbhatkar.SPay.payment.dto.response.PaymentAttemptResponse;
 import com.ammarbhatkar.SPay.payment.dto.response.PaymentResponse;
@@ -35,6 +38,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -59,7 +63,11 @@ public class PaymentServiceImpl implements PaymentService {
     private final SimulatorService simulatorService;
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final DlqEventRepository dlqEventRepository;
+    private final RateLimitService rateLimitService;
+    private final DistributedLockService distributedLockService;
+    private final OutboxService outboxService;
     private static final String UPI_PAYMENT_ENDPOINT = "/api/payments/upi";
+    private static final int PAYMENT_RATE_LIMIT_PER_MINUTE = 5;
 
 
 
@@ -83,6 +91,12 @@ public class PaymentServiceImpl implements PaymentService {
         if (existingResponse != null) {
             return existingResponse;
         }
+
+        rateLimitService.checkLimit(
+                "rate-limit:payments:" + userContext.getUserId(),
+                PAYMENT_RATE_LIMIT_PER_MINUTE,
+                Duration.ofMinutes(1)
+        );
 
         PaymentTransaction completedTransaction = processUpiPayment(request);
         PaymentResponse response = paymentMapper.toResponse(completedTransaction);
@@ -122,6 +136,20 @@ public class PaymentServiceImpl implements PaymentService {
         BankAccount senderAccount = senderHandle.getBankAccount();
         BankAccount receiverAccount = receiverHandle.getBankAccount();
 
+        return distributedLockService.executeWithLock(
+                "lock:bank-account:" + senderAccount.getId(),
+                Duration.ofSeconds(10),
+                () -> processUpiPaymentInsideLock(request, senderHandle, receiverHandle, senderAccount, receiverAccount)
+        );
+    }
+
+    private PaymentTransaction processUpiPaymentInsideLock(
+            CreateUpiPaymentRequest request,
+            UpiHandle senderHandle,
+            UpiHandle receiverHandle,
+            BankAccount senderAccount,
+            BankAccount receiverAccount
+    ) {
         PaymentTransaction transaction = PaymentTransaction.builder()
                 .type(PaymentType.UPI)
                 .status(PaymentStatus.INITIATED)
@@ -180,6 +208,7 @@ public class PaymentServiceImpl implements PaymentService {
         savedTransaction.setCompletedAt(Instant.now());
         PaymentTransaction completedTransaction = paymentTransactionRepository.save(savedTransaction);
         addTimeline(completedTransaction, PaymentStatus.SUCCESS, "Payment completed successfully");
+        outboxService.savePaymentEvent(completedTransaction, "PAYMENT_SUCCEEDED");
 
         return completedTransaction;
     }
@@ -262,6 +291,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         PaymentTransaction failedTransaction = paymentTransactionRepository.save(transaction);
         addTimeline(failedTransaction, PaymentStatus.FAILED, "Payment failed by simulator without retry");
+        outboxService.savePaymentEvent(failedTransaction, "PAYMENT_FAILED");
         return failedTransaction;
     }
 
@@ -315,6 +345,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         dlqEventRepository.save(dlqEvent);
         addTimeline(deadLetteredTransaction, PaymentStatus.DEAD_LETTERED, "Payment moved to DLQ after retries exhausted");
+        outboxService.savePaymentEvent(deadLetteredTransaction, "PAYMENT_DEAD_LETTERED");
         return deadLetteredTransaction;
     }
 

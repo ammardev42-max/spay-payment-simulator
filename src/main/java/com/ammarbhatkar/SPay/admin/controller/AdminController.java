@@ -1,6 +1,8 @@
 package com.ammarbhatkar.SPay.admin.controller;
 
 import com.ammarbhatkar.SPay.admin.dto.response.DlqEventResponse;
+import com.ammarbhatkar.SPay.admin.dto.response.OutboxEventResponse;
+import com.ammarbhatkar.SPay.admin.dto.response.ProcessedEventResponse;
 import com.ammarbhatkar.SPay.admin.service.AdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,5 +20,15 @@ public class AdminController {
     @GetMapping("/dlq")
     public ResponseEntity<List<DlqEventResponse>> getDlqEvents() {
         return ResponseEntity.ok(adminService.getDlqEvents());
+    }
+
+    @GetMapping("/outbox")
+    public ResponseEntity<List<OutboxEventResponse>> getOutboxEvents() {
+        return ResponseEntity.ok(adminService.getOutboxEvents());
+    }
+
+    @GetMapping("/processed-events")
+    public ResponseEntity<List<ProcessedEventResponse>> getProcessedEvents() {
+        return ResponseEntity.ok(adminService.getProcessedEvents());
     }
 }

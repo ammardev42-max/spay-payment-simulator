@@ -9,6 +9,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.time.Instant;
 import java.util.List;
 
 @RestControllerAdvice
@@ -79,6 +80,20 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(
                         "USER_ACCOUNT_DISABLED",
                         "User account is disabled"
+                ));
+    }
+
+    @ExceptionHandler(RateLimitException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimit(RateLimitException exception) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("X-RateLimit-Remaining", "0")
+                .header("Retry-After", String.valueOf(exception.getRetryAfterSeconds()))
+                .header("X-RateLimit-Reset", String.valueOf(
+                        Instant.now().plusSeconds(exception.getRetryAfterSeconds()).getEpochSecond()
+                ))
+                .body(ErrorResponse.of(
+                        "RATE_LIMIT_EXCEEDED",
+                        exception.getMessage()
                 ));
     }
 }

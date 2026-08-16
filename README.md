@@ -29,7 +29,7 @@ The backend is the core of the project: user onboarding, mock bank activation, U
 | Mapping | MapStruct |
 | Build | Maven wrapper |
 
-Redis, Kafka, and Docker Compose are included as project direction/skeleton for production-style extension, but the current stable demo focuses on PostgreSQL-backed payment correctness, idempotency, retry, and DLQ.
+Redis is used for UPI resolve caching, payment rate limiting, and sender-account distributed locking. A database-backed outbox table stores payment events in the same transaction as payment completion, then a scheduled publisher sends those events to Kafka and a consumer records processed events idempotently.
 
 ## Local Setup
 
@@ -37,6 +37,8 @@ Required:
 
 - Java 21 or newer
 - PostgreSQL running locally
+- Redis running locally, if you want to demo cache, rate limiting, and distributed locking
+- Kafka running locally, if you want to demo outbox publishing and idempotent consumption
 - Database named `spay_db`
 - Maven wrapper from this repository
 
@@ -358,6 +360,12 @@ SPay uses PCI-inspired controls for the demo, but it is not PCI DSS certified.
 | Idempotency | `X-Idempotency-Key`, request hash, response replay |
 | Retry handling | `PaymentAttempt` rows for retryable failures |
 | Dead-letter handling | `DlqEvent` row after attempts exhausted |
+| Caching | Redis cache for UPI resolve responses |
+| Rate limiting | Redis fixed-window limiter for UPI payment attempts |
+| Distributed locking | Redis sender-bank-account lock around debit/credit |
+| Outbox pattern | `OutboxEvent` row written with payment success/failure/DLQ |
+| Kafka | Scheduled outbox publisher sends payment events to Kafka |
+| Idempotent consumer | Kafka consumer stores `ProcessedEvent` rows and skips duplicates |
 | Clean failures | Business exceptions and validation responses |
 | Swagger | Springdoc OpenAPI UI |
 | Security | JWT, BCrypt, role-based admin APIs |
@@ -367,16 +375,17 @@ SPay uses PCI-inspired controls for the demo, but it is not PCI DSS certified.
 
 - Payment processing is synchronous for demo reliability.
 - Retry attempts are simulated immediately in the same request. `nextRetryAt` is stored to show realistic backoff, but no background scheduler is currently required for the demo.
-- Redis cache, rate limiting, distributed locking, Kafka, and outbox packages exist as production direction/skeleton, but the stable submitted backend path focuses on PostgreSQL transaction correctness, idempotency, retry, and DLQ.
+- Redis cache, rate limiting, and distributed locking are implemented with graceful fallback logging if Redis is unavailable locally.
+- Outbox events are persisted to PostgreSQL and published to Kafka by a scheduler. The demo still keeps money movement synchronous so payment correctness is easy to verify live.
 - Merchant QR flow is planned/scaffolded but not the primary tested demo path.
 - Flutter is optional/polish; the backend and Swagger flow are the reliable judging path.
 
 ## Future Scope
 
-- Redis caching for UPI and merchant QR lookup.
-- Redis rate limiting for payment, OTP, PIN, and UPI resolve APIs.
-- Redis distributed account locks plus PostgreSQL row locks for multi-instance double-spend prevention.
-- Transactional outbox and Kafka consumer for asynchronous payment processing.
+- Redis caching for merchant QR lookup.
+- Redis rate limiting for OTP, PIN, and UPI resolve APIs.
+- PostgreSQL row locks in addition to Redis account locks for stronger multi-instance double-spend prevention.
+- Async payment processing where Kafka consumer performs money movement instead of only consuming published outcome events.
 - Admin DLQ retry/replay API.
 - Merchant QR payment fully integrated into the same payment engine.
 - Flutter polished demo app.

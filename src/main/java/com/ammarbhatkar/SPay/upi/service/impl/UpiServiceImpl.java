@@ -14,6 +14,7 @@ import com.ammarbhatkar.SPay.upi.dto.response.UpiHandleResponse;
 import com.ammarbhatkar.SPay.upi.entity.UpiHandle;
 import com.ammarbhatkar.SPay.upi.mapper.UpiHandleMapper;
 import com.ammarbhatkar.SPay.upi.repository.UpiHandleRepository;
+import com.ammarbhatkar.SPay.upi.service.UpiResolveCacheService;
 import com.ammarbhatkar.SPay.upi.service.UpiService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,7 @@ public class UpiServiceImpl implements UpiService {
     private final UpiHandleRepository upiHandleRepository;
     private final UpiHandleMapper upiHandleMapper;
     private final UserContext userContext;
+    private final UpiResolveCacheService upiResolveCacheService;
 
     @Override
     @Transactional
@@ -62,7 +64,10 @@ public class UpiServiceImpl implements UpiService {
 
         UpiHandle savedHandle = upiHandleRepository.save(upiHandle);
 
-        return upiHandleMapper.toResponse(savedHandle);
+        UpiHandleResponse response = upiHandleMapper.toResponse(savedHandle);
+        upiResolveCacheService.put(upiId, response);
+
+        return response;
     }
 
     @Override
@@ -76,10 +81,20 @@ public class UpiServiceImpl implements UpiService {
     public UpiHandleResponse resolve(String upiId) {
         String normalizedUpiId = upiId.trim().toLowerCase(Locale.ROOT);
 
+        UpiHandleResponse cachedResponse = upiResolveCacheService.get(normalizedUpiId)
+                .orElse(null);
+
+        if (cachedResponse != null) {
+            return cachedResponse;
+        }
+
         UpiHandle upiHandle = upiHandleRepository.findByUpiIdAndStatus(normalizedUpiId, UpiHandleStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("UpiHandle", normalizedUpiId));
 
-        return upiHandleMapper.toResponse(upiHandle);
+        UpiHandleResponse response = upiHandleMapper.toResponse(upiHandle);
+        upiResolveCacheService.put(normalizedUpiId, response);
+
+        return response;
     }
 
     private void validateBankAccountForUpi(BankAccount bankAccount) {

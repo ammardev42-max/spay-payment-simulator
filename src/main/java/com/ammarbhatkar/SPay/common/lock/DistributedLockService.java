@@ -1,5 +1,9 @@
 package com.ammarbhatkar.SPay.common.lock;
 
-public interface DistributedLockService {
-}
+import java.time.Duration;
+import java.util.function.Supplier;
 
+public interface DistributedLockService {
+
+    <T> T executeWithLock(String lockKey, Duration ttl, Supplier<T> action);
+}
