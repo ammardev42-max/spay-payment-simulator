@@ -4,6 +4,7 @@ import com.ammarbhatkar.SPay.bank.entity.BankAccount;
 import com.ammarbhatkar.SPay.bank.repository.BankAccountRepository;
 import com.ammarbhatkar.SPay.bank.repository.UpiCredentialRepository;
 import com.ammarbhatkar.SPay.common.enums.BankAccountStatus;
+import com.ammarbhatkar.SPay.common.enums.UpiHandleStatus;
 import com.ammarbhatkar.SPay.common.exception.BusinessRuleViolationException;
 import com.ammarbhatkar.SPay.common.exception.DuplicateResourceException;
 import com.ammarbhatkar.SPay.common.exception.ResourceNotFoundException;
@@ -55,7 +56,7 @@ public class UpiServiceImpl implements UpiService {
                 .user(bankAccount.getUser())
                 .bankAccount(bankAccount)
                 .upiId(upiId)
-                .active(true)
+                .status(UpiHandleStatus.ACTIVE)
                 .defaultHandle(defaultHandle)
                 .build();
 
@@ -75,7 +76,7 @@ public class UpiServiceImpl implements UpiService {
     public UpiHandleResponse resolve(String upiId) {
         String normalizedUpiId = upiId.trim().toLowerCase(Locale.ROOT);
 
-        UpiHandle upiHandle = upiHandleRepository.findByUpiIdAndActiveTrue(normalizedUpiId)
+        UpiHandle upiHandle = upiHandleRepository.findByUpiIdAndStatus(normalizedUpiId, UpiHandleStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("UpiHandle", normalizedUpiId));
 
         return upiHandleMapper.toResponse(upiHandle);

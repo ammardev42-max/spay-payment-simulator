@@ -15,6 +15,7 @@ public interface UpiHandleMapper {
     @Mapping(target = "displayName", source = "user.fullName")
     @Mapping(target = "bankName", source = "bankAccount.bankName")
     @Mapping(target = "maskedAccountNumber", source = "bankAccount.maskedAccountNumber")
+    @Mapping(target = "status", expression = "java(upiHandle.getStatus().name())")
     UpiHandleResponse toResponse(UpiHandle upiHandle);
 
     List<UpiHandleResponse> toResponseList(List<UpiHandle> upiHandles);

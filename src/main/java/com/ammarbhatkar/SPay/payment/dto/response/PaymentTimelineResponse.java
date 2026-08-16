@@ -1,4 +1,12 @@
 package com.ammarbhatkar.SPay.payment.dto.response;
 
-public class PaymentTimelineResponse {
+import java.time.Instant;
+import java.util.UUID;
+
+public record PaymentTimelineResponse(
+        UUID id,
+        String status,
+        String message,
+        Instant createdAt
+) {
 }

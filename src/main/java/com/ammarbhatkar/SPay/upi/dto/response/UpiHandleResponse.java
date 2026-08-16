@@ -9,7 +9,7 @@ public record UpiHandleResponse(
         String displayName,
         String bankName,
         String maskedAccountNumber,
-        boolean active,
+        String status,
         boolean defaultHandle
 ) {
 }

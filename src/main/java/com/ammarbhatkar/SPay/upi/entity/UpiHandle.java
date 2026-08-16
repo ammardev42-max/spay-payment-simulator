@@ -1,6 +1,7 @@
 package com.ammarbhatkar.SPay.upi.entity;
 
 import com.ammarbhatkar.SPay.bank.entity.BankAccount;
+import com.ammarbhatkar.SPay.common.enums.UpiHandleStatus;
 import com.ammarbhatkar.SPay.user.entity.AppUser;
 import jakarta.persistence.*;
 import lombok.*;
@@ -32,8 +33,9 @@ public class UpiHandle {
     @Column(nullable = false, unique = true, length = 80)
     private String upiId;
 
-    @Column(nullable = false)
-    private Boolean active;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private UpiHandleStatus status;
 
     @Column(nullable = false)
     private Boolean defaultHandle;

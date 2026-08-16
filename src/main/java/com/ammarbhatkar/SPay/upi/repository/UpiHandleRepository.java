@@ -1,5 +1,6 @@
 package com.ammarbhatkar.SPay.upi.repository;
 
+import com.ammarbhatkar.SPay.common.enums.UpiHandleStatus;
 import com.ammarbhatkar.SPay.upi.entity.UpiHandle;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -15,5 +16,5 @@ public interface UpiHandleRepository extends JpaRepository<UpiHandle, UUID> {
 
     List<UpiHandle> findByUser_Id(UUID userId);
 
-    Optional<UpiHandle> findByUpiIdAndActiveTrue(String upiId);
+    Optional<UpiHandle> findByUpiIdAndStatus(String upiId, UpiHandleStatus status);
 }
