@@ -5,6 +5,7 @@ import com.ammarbhatkar.SPay.payment.dto.request.CreateUpiPaymentRequest;
 import com.ammarbhatkar.SPay.payment.dto.response.PaymentResponse;
 import com.ammarbhatkar.SPay.payment.dto.response.PaymentTimelineResponse;
 import com.ammarbhatkar.SPay.payment.service.PaymentService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,7 +22,7 @@ public class PaymentController {
 
     @PostMapping("/upi")
     public ResponseEntity<PaymentResponse>createUpiPayment
-            (CreateUpiPaymentRequest request){
+            (@RequestBody @Valid CreateUpiPaymentRequest request){
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(paymentService.createUpiPayment(request));
     }
