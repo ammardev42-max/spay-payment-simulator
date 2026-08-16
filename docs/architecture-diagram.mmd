@@ -1,41 +1,55 @@
 flowchart LR
-    subgraph client ["Clients"]
-        flutter["Flutter App"]
-        swagger["Swagger and Postman"]
+    subgraph clients["Clients"]
+        flutter["Flutter Demo App"]
+        swagger["Swagger / Postman"]
     end
 
-    subgraph gateway ["API Layer"]
-        restApi["Spring MVC REST API"]
+    subgraph api["Spring Boot API"]
+        auth["Auth + JWT"]
+        bank["Bank Activation"]
+        upi["UPI Handle Resolve"]
+        payment["UPI Payment Engine"]
+        admin["Admin APIs"]
     end
 
-    subgraph service ["SPay Spring Boot Application"]
-        core["Auth, Bank, UPI, Merchant, Payment, Ledger"]
-        outboxPublisher["Outbox Publisher"]
-        paymentWorker["Payment Event Consumer"]
-        retryWorker["Retry and DLQ Worker"]
-        simulator["Payment Simulator"]
+    subgraph reliability["Reliability Patterns"]
+        idem["Idempotency"]
+        simulator["Simulator"]
+        retry["Retry + DLQ"]
+        outbox["Transactional Outbox"]
+        publisher["Scheduled Outbox Publisher"]
+        consumer["Kafka Consumer Dedup"]
     end
 
-    subgraph datastore ["Data Stores"]
+    subgraph infra["Infrastructure"]
         postgres["PostgreSQL"]
-        redis["Redis Cache, Limits, and Locks"]
+        redis["Redis Cache / Rate Limit / Lock"]
+        kafka["Kafka Topic"]
+        kafkaUi["Kafka UI"]
     end
 
-    subgraph async ["Event Streaming"]
-        kafka["Kafka"]
-    end
-
-    flutter -->|"HTTPS JSON"| restApi
-    swagger -->|"HTTPS JSON"| restApi
-    restApi -->|"Routes"| core
-    core -->|"Transactions and Outbox"| postgres
-    core -->|"Cache and Rate Limits"| redis
-    outboxPublisher -->|"Claims Events"| postgres
-    outboxPublisher -.->|"Publishes PaymentRequested"| kafka
-    kafka -.->|"Delivers Events"| paymentWorker
-    paymentWorker -->|"Reads and Writes Payments"| postgres
-    paymentWorker -->|"Account Locks"| redis
-    paymentWorker -->|"Selects Outcome"| simulator
-    retryWorker -->|"Reads Pending and DLQ"| postgres
-    retryWorker -.->|"Republishes Retry"| kafka
-
+    flutter --> api
+    swagger --> api
+    api --> auth
+    api --> bank
+    api --> upi
+    api --> payment
+    payment --> idem
+    payment --> simulator
+    payment --> retry
+    payment --> outbox
+    auth --> postgres
+    bank --> postgres
+    upi --> postgres
+    upi --> redis
+    payment --> postgres
+    payment --> redis
+    outbox --> postgres
+    publisher --> postgres
+    publisher --> kafka
+    kafka --> consumer
+    consumer --> postgres
+    admin --> simulator
+    admin --> retry
+    admin --> outbox
+    kafkaUi --> kafka

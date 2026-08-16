@@ -1,26 +1,43 @@
 sequenceDiagram
-    title SPay asynchronous UPI payment happy path
-    participant Flutter
-    participant API
-    participant PostgreSQL
-    participant OutboxPublisher
-    participant Kafka
-    participant PaymentConsumer
+    title SPay UPI Payment With Redis, Idempotency, Outbox, Kafka
+    participant Client as Flutter / Swagger
+    participant API as Payment API
     participant Redis
+    participant DB as PostgreSQL
     participant Simulator
+    participant Publisher as Outbox Publisher
+    participant Kafka
+    participant Consumer as Kafka Consumer
 
-    Flutter->>API: POST /api/payments/upi
-    API->>Redis: Check payment rate limit
-    API->>PostgreSQL: Validate idempotency and save payment plus outbox
-    PostgreSQL-->>API: Transaction committed
-    API-->>Flutter: 202 with transaction ID
-    OutboxPublisher->>PostgreSQL: Claim pending outbox event
-    OutboxPublisher->>Kafka: Publish PaymentRequested
-    Kafka-->>PaymentConsumer: Deliver event
-    PaymentConsumer->>Redis: Acquire account locks
-    PaymentConsumer->>PostgreSQL: Lock rows and validate balance
-    PaymentConsumer->>Simulator: Resolve processing outcome
-    Simulator-->>PaymentConsumer: Success
-    PaymentConsumer->>PostgreSQL: Post ledger and mark success
-    Flutter->>API: GET /api/payments/id
-    API-->>Flutter: SUCCESS receipt
+    Client->>API: POST /api/payments/upi + X-Idempotency-Key
+    API->>DB: Check idempotency key and request hash
+    alt Existing same request
+        DB-->>API: Stored response
+        API-->>Client: Same payment response, no double debit
+    else New request
+        API->>Redis: Check payment rate limit
+        API->>DB: Resolve sender and receiver UPI handles
+        API->>Redis: Acquire sender account lock
+        API->>DB: Validate PIN, account state, balance
+        API->>Simulator: Decide success, retryable failure, or final failure
+        alt Success
+            API->>DB: Debit sender, credit receiver, ledger, timeline
+            API->>DB: Save outbox event PAYMENT_SUCCEEDED
+        else Retryable failure
+            API->>DB: Save attempts, timeline, DLQ, outbox event
+        else Non-retryable failure
+            API->>DB: Save failed payment, attempt, outbox event
+        end
+        API->>DB: Save idempotency response
+        API->>Redis: Release sender account lock
+        API-->>Client: Final payment response
+    end
+
+    loop Every 5 seconds
+        Publisher->>DB: Read pending or failed outbox events
+        Publisher->>Kafka: Publish payment event envelope
+        Publisher->>DB: Mark outbox event PUBLISHED
+    end
+
+    Kafka-->>Consumer: Deliver payment event
+    Consumer->>DB: Store processed event if not already consumed

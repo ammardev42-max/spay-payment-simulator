@@ -188,32 +188,31 @@ erDiagram
 
     OUTBOX_EVENT {
         string id
-        string transactionId
+        string eventType
         string aggregateType
         string aggregateId
-        string eventType
-        string payloadJson
+        string payload
         string status
         int attempts
-        string nextAttemptAt
-        string lastError
+        string failureReason
         string createdAt
+        string updatedAt
         string publishedAt
     }
 
     PROCESSED_EVENT {
         string id
-        string outboxEventId
         string eventId
+        string eventType
         string consumerName
         string processedAt
+        string payload
     }
 
     DLQ_EVENT {
         string id
         string transactionId
         string lastAttemptId
-        string sourceEventId
         string status
         string reasonCode
         string reason
